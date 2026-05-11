@@ -1,5 +1,9 @@
 import os
+from dotenv import load_dotenv
 from bedrock_agentcore.payments.client import PaymentClient
+
+# .env ファイルから環境変数を読み込む
+load_dotenv()
 
 # payments インスタンスを生成
 payment_client = PaymentClient(region_name="us-west-2");

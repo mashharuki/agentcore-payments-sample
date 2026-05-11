@@ -490,6 +490,7 @@ dependencies = [
     { name = "bedrock-agentcore" },
     { name = "boto3" },
     { name = "botocore", extra = ["crt"] },
+    { name = "python-dotenv" },
     { name = "strands-agents" },
     { name = "strands-agents-tools" },
 ]
@@ -499,6 +500,7 @@ requires-dist = [
     { name = "bedrock-agentcore", specifier = ">=1.9.0" },
     { name = "boto3", specifier = ">=1.43.6" },
     { name = "botocore", extras = ["crt"], specifier = ">=1.43.5" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "strands-agents", specifier = ">=1.0.0" },
     { name = "strands-agents-tools", specifier = ">=0.2.0" },
 ]
