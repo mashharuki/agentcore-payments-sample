@@ -26,6 +26,10 @@ def extract_manager_id(manager_arn: str) -> str:
     return manager_arn.split("/")[-1]
 
 
+def extract_provider_name(provider_arn: str) -> str:
+    return provider_arn.split("/")[-1]
+
+
 def preflight_check() -> None:
     manager_id = extract_manager_id(PAYMENT_MANAGER_ARN)
     control = boto3.client("bedrock-agentcore-control", region_name=REGION)
@@ -63,13 +67,34 @@ def preflight_check() -> None:
             "Run src/03_fix_connector.py to attach a credential provider."
         )
 
-    missing = [arn for arn in referenced_arns if arn not in provider_arns]
+    missing = []
+    for arn in referenced_arns:
+        if arn in provider_arns:
+            continue
+
+        provider_name = extract_provider_name(arn)
+        try:
+            provider = control.get_payment_credential_provider(name=provider_name)
+            resolved_arn = provider.get("credentialProviderArn") or provider.get(
+                "paymentCredentialProviderArn"
+            )
+            if resolved_arn:
+                provider_arns[resolved_arn] = "UNKNOWN"
+            else:
+                # 念のため、参照ARN自体を存在扱いとして追加
+                provider_arns[arn] = "UNKNOWN"
+        except ClientError:
+            missing.append(arn)
+
     if missing:
         raise RuntimeError(
             "Connector references missing credential provider(s): " + ", ".join(missing)
         )
 
-    not_ready = [arn for arn in referenced_arns if provider_arns.get(arn) != "READY"]
+    not_ready = [
+        arn for arn in referenced_arns
+        if provider_arns.get(arn) not in ("READY", "UNKNOWN")
+    ]
     if not_ready:
         details = ", ".join(
             f"{arn} (status={provider_arns.get(arn)})" for arn in not_ready
@@ -77,6 +102,32 @@ def preflight_check() -> None:
         raise RuntimeError(
             "Referenced credential provider is not READY: " + details
         )
+
+    # CoinbaseCDP の場合は、参照providerと .env の API key id の一致確認を行う
+    expected_api_key_id = os.getenv("COINBASE_API_KEY_ID")
+    if expected_api_key_id:
+        mismatched = []
+        for arn in referenced_arns:
+            provider_name = extract_provider_name(arn)
+            try:
+                provider = control.get_payment_credential_provider(name=provider_name)
+            except ClientError:
+                continue
+
+            output = provider.get("providerConfigurationOutput", {})
+            actual_api_key_id = (
+                output.get("coinbaseCdpConfiguration", {}).get("apiKeyId")
+            )
+            if actual_api_key_id and actual_api_key_id != expected_api_key_id:
+                mismatched.append(
+                    f"{provider_name}: expected={expected_api_key_id}, actual={actual_api_key_id}"
+                )
+
+        if mismatched:
+            logger.warning(
+                "COINBASE_API_KEY_ID mismatch detected in referenced provider(s): %s",
+                "; ".join(mismatched),
+            )
 
     logger.info("Preflight check passed (connector/provider are READY)")
 
@@ -88,6 +139,12 @@ USER_ID = get_required_env("USER_ID")
 TARGET_CHAIN = os.getenv("TARGET_CHAIN", "BASE_SEPOLIA")
 BALANCE_TOKEN = os.getenv("BALANCE_TOKEN")
 LINKED_ACCOUNT_EMAIL = os.getenv("LINKED_ACCOUNT_EMAIL", "test@example.com")
+
+if LINKED_ACCOUNT_EMAIL == "test@example.com":
+    raise ValueError(
+        "LINKED_ACCOUNT_EMAIL is not set. Set your Coinbase linked account email in .env "
+        "(default test@example.com is not valid for production API calls)."
+    )
 
 # PaymentManager の初期化
 try:
@@ -172,6 +229,12 @@ for i, pattern in enumerate(patterns, 1):
     except Exception as e:
         error_str = str(e)
         logger.warning(f"✗ Failed: {error_str[:200]}")
+        cause = getattr(e, "__cause__", None)
+        request_id = None
+        if isinstance(cause, ClientError):
+            request_id = cause.response.get("ResponseMetadata", {}).get("RequestId")
+        if request_id:
+            logger.warning("  → AWS RequestId: %s", request_id)
         if "network" in error_str.lower():
             logger.warning("  → Issue with network parameter")
         elif "linkedAccounts" in error_str:
@@ -179,7 +242,10 @@ for i, pattern in enumerate(patterns, 1):
         elif "not found" in error_str.lower():
             logger.warning("  → Connector or resource not found")
         elif "InternalServerException" in error_str:
-            logger.warning("  → Backend-side error. Check connector/provider health with src/02_diagnose.py")
+            logger.warning(
+                "  → Backend-side error. Verify LINKED_ACCOUNT_EMAIL and Coinbase API credentials, "
+                "then check src/02_diagnose.py and src/03_fix_connector.py"
+            )
         else:
             logger.warning(f"  → Other error (see details above)")
 

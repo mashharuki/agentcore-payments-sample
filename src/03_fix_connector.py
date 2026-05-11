@@ -1,7 +1,14 @@
 import os
 import json
+import time
+from pathlib import Path
 import boto3
 from botocore.exceptions import ClientError, LoginRefreshRequired
+from dotenv import load_dotenv
+
+
+# プロジェクトルートの .env を読み込む
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 
 REGION = os.getenv("REGION", "us-west-2")
@@ -18,18 +25,43 @@ def required_env(name: str) -> str:
 
 
 def find_provider_arn_by_name(control, provider_name: str) -> str | None:
-    providers = control.list_payment_credential_providers().get(
-        "paymentCredentialProviders", []
-    )
-    for provider in providers:
-        if provider.get("name") != provider_name:
-            continue
-        arn = provider.get("paymentCredentialProviderArn") or provider.get(
-            "credentialProviderArn"
-        )
-        if arn:
-            return arn
+    next_token = None
+    while True:
+        kwargs = {}
+        if next_token:
+            kwargs["nextToken"] = next_token
+
+        res = control.list_payment_credential_providers(**kwargs)
+        providers = res.get("paymentCredentialProviders", [])
+        for provider in providers:
+            resolved_name = provider.get("name") or provider.get("paymentCredentialProviderName")
+            if resolved_name != provider_name:
+                continue
+            arn = provider.get("paymentCredentialProviderArn") or provider.get(
+                "credentialProviderArn"
+            )
+            if arn:
+                return arn
+
+        next_token = res.get("nextToken")
+        if not next_token:
+            break
+
     return None
+
+
+def create_provider(control, provider_name: str, api_key_id: str, api_key_secret: str, wallet_secret: str):
+    return control.create_payment_credential_provider(
+        name=provider_name,
+        credentialProviderVendor="CoinbaseCDP",
+        providerConfigurationInput={
+            "coinbaseCdpConfiguration": {
+                "apiKeyId": api_key_id,
+                "apiKeySecret": api_key_secret,
+                "walletSecret": wallet_secret,
+            }
+        },
+    )
 
 
 def main() -> int:
@@ -45,16 +77,12 @@ def main() -> int:
         wallet_secret = required_env("COINBASE_WALLET_SECRET")
 
         try:
-            create_res = control.create_payment_credential_provider(
-                name=PROVIDER_NAME,
-                credentialProviderVendor="CoinbaseCDP",
-                providerConfigurationInput={
-                    "coinbaseCdpConfiguration": {
-                        "apiKeyId": api_key_id,
-                        "apiKeySecret": api_key_secret,
-                        "walletSecret": wallet_secret,
-                    }
-                },
+            create_res = create_provider(
+                control,
+                PROVIDER_NAME,
+                api_key_id,
+                api_key_secret,
+                wallet_secret,
             )
         except ClientError as e:
             if (
@@ -63,9 +91,20 @@ def main() -> int:
             ):
                 provider_arn = find_provider_arn_by_name(control, PROVIDER_NAME)
                 if not provider_arn:
-                    raise RuntimeError(
-                        "Provider already exists but ARN could not be resolved by name"
-                    ) from e
+                    # 稀に list API から見えない同名 provider が存在するため、別名で再作成して先に進める
+                    suffix = str(int(time.time()))[-6:]
+                    fallback_name = f"{PROVIDER_NAME}-{suffix}"
+                    print(
+                        "provider name already exists but cannot be listed; "
+                        f"creating with fallback name: {fallback_name}"
+                    )
+                    create_res = create_provider(
+                        control,
+                        fallback_name,
+                        api_key_id,
+                        api_key_secret,
+                        wallet_secret,
+                    )
             else:
                 raise
 

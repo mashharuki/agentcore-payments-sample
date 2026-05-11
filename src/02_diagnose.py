@@ -11,6 +11,10 @@ REGION = "us-west-2"
 PAYMENT_MANAGER_ID = "paymentmanager-kkrc0cwayx"
 
 
+def extract_provider_name(provider_arn: str) -> str:
+    return provider_arn.split("/")[-1]
+
+
 def main() -> int:
     control = boto3.client("bedrock-agentcore-control", region_name=REGION)
 
@@ -22,6 +26,7 @@ def main() -> int:
             paymentManagerId=PAYMENT_MANAGER_ID
         ).get("paymentConnectors", [])
         logger.info("payment connectors: %d", len(connectors))
+        referenced_provider_arns = set()
         for c in connectors:
             logger.info(
                 "connector id=%s status=%s type=%s",
@@ -29,6 +34,28 @@ def main() -> int:
                 c.get("status"),
                 c.get("type"),
             )
+            connector_id = c.get("paymentConnectorId")
+            if not connector_id:
+                continue
+            try:
+                detail = control.get_payment_connector(
+                    paymentManagerId=PAYMENT_MANAGER_ID,
+                    paymentConnectorId=connector_id,
+                )
+            except ClientError as ge:
+                logger.warning(
+                    "skip connector detail fetch: id=%s error=%s",
+                    connector_id,
+                    ge,
+                )
+                continue
+            for cfg in detail.get("credentialProviderConfigurations", []):
+                coinbase_arn = cfg.get("coinbaseCDP", {}).get("credentialProviderArn")
+                stripe_arn = cfg.get("stripePrivy", {}).get("credentialProviderArn")
+                if coinbase_arn:
+                    referenced_provider_arns.add(coinbase_arn)
+                if stripe_arn:
+                    referenced_provider_arns.add(stripe_arn)
 
         providers = control.list_payment_credential_providers().get(
             "paymentCredentialProviders", []
@@ -41,6 +68,30 @@ def main() -> int:
                 p.get("status"),
                 p.get("type"),
             )
+
+        if referenced_provider_arns:
+            logger.info(
+                "connector referenced provider arns: %d", len(referenced_provider_arns)
+            )
+            for arn in sorted(referenced_provider_arns):
+                name = extract_provider_name(arn)
+                try:
+                    provider = control.get_payment_credential_provider(name=name)
+                    logger.info(
+                        "provider reachable by get: name=%s arn=%s vendor=%s",
+                        provider.get("name"),
+                        provider.get("credentialProviderArn")
+                        or provider.get("paymentCredentialProviderArn"),
+                        provider.get("credentialProviderVendor")
+                        or provider.get("type"),
+                    )
+                except ClientError as ge:
+                    logger.warning(
+                        "provider not reachable by get: name=%s arn=%s error=%s",
+                        name,
+                        arn,
+                        ge,
+                    )
 
     except Exception as e:  # show friendly remediation for auth expiry
         msg = str(e)

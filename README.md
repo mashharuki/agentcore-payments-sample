@@ -133,6 +133,34 @@ export COINBASE_WALLET_SECRET="..."
 ]
 ```
 
+### Coinbase CDP の登録済みアカウント一覧を確認したい
+`cdp-sdk` を使って EVM/Solana のアカウント一覧を取得できます。
+
+```bash
+# .env の COINBASE_* か CDP_* を利用
+uv run src/list_cdp_accounts.py
+
+# EVM のみ
+uv run src/list_cdp_accounts.py --chain evm
+
+# Solana のみ
+uv run src/list_cdp_accounts.py --chain solana
+```
+
+### Coinbase CDP のアカウントを作成したい
+`cdp-sdk` を使って EVM/Solana アカウントを作成できます。
+
+```bash
+# EVM アカウントを1つ作成
+uv run src/create_cdp_account.py --chain evm
+
+# Solana アカウントを1つ作成（名前指定）
+uv run src/create_cdp_account.py --chain solana --name my-solana-account
+
+# EVM アカウントを3つ作成（name-1, name-2, name-3）
+uv run src/create_cdp_account.py --chain evm --name my-evm-account --count 3
+```
+
 ## 参考資料
 
 - [AWS Bedrock AgentCore Payments API Documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/payments.html)
