@@ -21,8 +21,8 @@ def required_env(name: str) -> str:
     return value
 
 
-PAYMENT_MANAGER_ARN = required_env("PAYMENT_MANAGER_ARN")
-PAYMENT_CONNECTOR_ID = required_env("PAYMENT_CONNECTOR_ID")
+PAYMENT_MANAGER_ARN = os.getenv("PAYMENT_MANAGER_ARN")
+PAYMENT_CONNECTOR_ID = os.getenv("PAYMENT_CONNECTOR_ID")
 REGION = os.getenv("AWS_REGION") or os.getenv("REGION", "us-west-2")
 USER_ID = os.getenv("AGENTCORE_USER_ID", "test-user-123")
 
@@ -68,6 +68,8 @@ def preflight_check() -> None:
         )
 
 try:
+    PAYMENT_MANAGER_ARN = required_env("PAYMENT_MANAGER_ARN")
+    PAYMENT_CONNECTOR_ID = required_env("PAYMENT_CONNECTOR_ID")
     logger.info(f"PaymentManager初期化開始: {PAYMENT_MANAGER_ARN}")
     manager = PaymentManager(
         payment_manager_arn=PAYMENT_MANAGER_ARN,

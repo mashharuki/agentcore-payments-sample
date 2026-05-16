@@ -16,18 +16,20 @@ def required_env(name: str) -> str:
     return value
 
 
-PAYMENT_MANAGER_ARN = required_env("PAYMENT_MANAGER_ARN")
-PAYMENT_CONNECTOR_ID = required_env("PAYMENT_CONNECTOR_ID")
+PAYMENT_MANAGER_ARN = os.getenv("PAYMENT_MANAGER_ARN")
+PAYMENT_CONNECTOR_ID = os.getenv("PAYMENT_CONNECTOR_ID")
 REGION = os.getenv("AWS_REGION") or os.getenv("REGION", "us-west-2")
 USER_ID = os.getenv("AGENTCORE_USER_ID", "test-user-123")
 
-manager = PaymentManager(
-    payment_manager_arn=PAYMENT_MANAGER_ARN,
-    region_name=REGION
-)
-
 # linkedAccounts は必須だと判明したので、シンプルに試す
 try:
+    PAYMENT_MANAGER_ARN = required_env("PAYMENT_MANAGER_ARN")
+    PAYMENT_CONNECTOR_ID = required_env("PAYMENT_CONNECTOR_ID")
+    manager = PaymentManager(
+        payment_manager_arn=PAYMENT_MANAGER_ARN,
+        region_name=REGION
+    )
+
     logger.info("Creating payment instrument with linkedAccounts...")
     instrument = manager.create_payment_instrument(
         user_id=USER_ID,
