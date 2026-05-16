@@ -3,15 +3,23 @@
 Payment Instrument 作成テスト - LinkedAccounts が必須
 """
 import logging
+import os
 from bedrock_agentcore.payments import PaymentManager
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
-PAYMENT_MANAGER_ARN = "arn:aws:bedrock-agentcore:us-west-2:796032104877:payment-manager/paymentmanager-kkrc0cwayx"
-PAYMENT_CONNECTOR_ID = "test1234-wxxu1phdpx"
-REGION = "us-west-2"
-USER_ID = "test-user-123"
+def required_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise ValueError(f"missing required env var: {name}")
+    return value
+
+
+PAYMENT_MANAGER_ARN = required_env("PAYMENT_MANAGER_ARN")
+PAYMENT_CONNECTOR_ID = required_env("PAYMENT_CONNECTOR_ID")
+REGION = os.getenv("AWS_REGION") or os.getenv("REGION", "us-west-2")
+USER_ID = os.getenv("AGENTCORE_USER_ID", "test-user-123")
 
 manager = PaymentManager(
     payment_manager_arn=PAYMENT_MANAGER_ARN,

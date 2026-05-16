@@ -12,16 +12,17 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 
 REGION = os.getenv("REGION", "us-west-2")
-PAYMENT_MANAGER_ID = os.getenv("PAYMENT_MANAGER_ID", "paymentmanager-kkrc0cwayx")
-PAYMENT_CONNECTOR_ID = os.getenv("PAYMENT_CONNECTOR_ID", "test1234-wxxu1phdpx")
-PROVIDER_NAME = os.getenv("PAYMENT_PROVIDER_NAME", "coinbase-provider-main")
-
 
 def required_env(name: str) -> str:
     value = os.getenv(name)
     if not value:
         raise ValueError(f"missing env var: {name}")
     return value
+
+
+PAYMENT_MANAGER_ID = required_env("PAYMENT_MANAGER_ID")
+PAYMENT_CONNECTOR_ID = required_env("PAYMENT_CONNECTOR_ID")
+PROVIDER_NAME = os.getenv("PAYMENT_PROVIDER_NAME", "coinbase-provider-main")
 
 
 def find_provider_arn_by_name(control, provider_name: str) -> str | None:

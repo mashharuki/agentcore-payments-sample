@@ -1,5 +1,6 @@
 import boto3
 import logging
+import os
 from botocore.exceptions import BotoCoreError, ClientError, LoginRefreshRequired
 
 
@@ -7,8 +8,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
-REGION = "us-west-2"
-PAYMENT_MANAGER_ID = "paymentmanager-kkrc0cwayx"
+REGION = os.getenv("AWS_REGION") or os.getenv("REGION", "us-west-2")
+PAYMENT_MANAGER_ID = os.getenv("PAYMENT_MANAGER_ID")
 
 
 def extract_provider_name(provider_arn: str) -> str:
@@ -16,6 +17,10 @@ def extract_provider_name(provider_arn: str) -> str:
 
 
 def main() -> int:
+    if not PAYMENT_MANAGER_ID:
+        logger.error("PAYMENT_MANAGER_ID environment variable is required.")
+        return 2
+
     control = boto3.client("bedrock-agentcore-control", region_name=REGION)
 
     try:
